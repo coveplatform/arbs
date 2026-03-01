@@ -57,10 +57,12 @@ Return [] if no genuine matches.`
       temperature: 0,
     })
     const text = res.choices[0]?.message?.content ?? '[]'
+    console.log(`matchBatch(${aSlice[0]?.platform}×${bSlice[0]?.platform}): GPT raw → ${text.slice(0, 200)}`)
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) return []
     return JSON.parse(jsonMatch[0])
-  } catch {
+  } catch (err) {
+    console.error('matchBatch OpenAI error:', String(err).slice(0, 200))
     return []
   }
 }
