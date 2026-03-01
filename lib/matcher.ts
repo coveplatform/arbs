@@ -13,6 +13,8 @@ const EXCLUDE_PATTERNS = [
   /win the.*bundesliga/i, /win the.*serie a/i, /win the.*la liga/i,
   /\bnba\b/i, /\bnfl\b/i, /\bmlb\b/i, /\bnhl\b/i,
   /\bworld cup\b/i, /\bsuper bowl\b/i, /\bchampionship\b.*game/i,
+  /\bfc\b.*win/i, /win on \d{4}-\d{2}-\d{2}/i, /spread:/i, /\(-\d+\.?\d*\)/i,
+  /\bgoals?\b.*match/i, /\bover\/under\b/i,
   // Crypto / price speculation (high-volume on Polymarket but unmatchable elsewhere)
   /\b(bitcoin|ethereum|solana|dogecoin|cardano|ripple)\b/i,
   /\b(btc|eth|sol|doge|xrp|bnb|ada|avax|matic|link)\b/i,
