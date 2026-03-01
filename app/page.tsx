@@ -9,6 +9,7 @@ const P = {
   kalshi:     { color: '#00d4aa', label: 'KALS', name: 'Kalshi'     },
   smarkets:   { color: '#e85d4a', label: 'SMKT', name: 'Smarkets'   },
   predictit:  { color: '#f5a623', label: 'PRDT', name: 'PredictIt'  },
+  betfair:    { color: '#ffb300', label: 'BETF', name: 'Betfair'     },
 } as const
 type PKey = keyof typeof P
 const plat = (k: string) => P[k as PKey] ?? { color: '#666', label: k.slice(0,4).toUpperCase(), name: k }

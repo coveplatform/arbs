@@ -3,6 +3,7 @@ import { fetchPolymarkets } from '@/lib/polymarket'
 import { fetchKalshiMarkets } from '@/lib/kalshi'
 import { fetchSmarketsMarkets } from '@/lib/smarkets'
 import { fetchPredictItMarkets } from '@/lib/predictit'
+import { fetchBetfairMarkets } from '@/lib/betfair'
 import { matchMarkets } from '@/lib/matcher'
 import { Market, MarketPair, ScanResult } from '@/lib/types'
 
@@ -17,19 +18,21 @@ function byVolume(a: Market, b: Market) { return b.volume - a.volume }
 export async function GET() {
   try {
     // Fetch all real-money platforms in parallel
-    const [rawPoly, rawKalshi, rawSmarkets, rawPredictIt] = await Promise.all([
-      withTimeout(fetchPolymarkets(),       10000, [] as Market[]),
+    const [rawPoly, rawKalshi, rawSmarkets, rawPredictIt, rawBetfair] = await Promise.all([
+      withTimeout(fetchPolymarkets(),       12000, [] as Market[]),
       withTimeout(fetchKalshiMarkets(200),  8000,  [] as Market[]),
       withTimeout(fetchSmarketsMarkets(),   20000, [] as Market[]),
       withTimeout(fetchPredictItMarkets(),  10000, [] as Market[]),
+      withTimeout(fetchBetfairMarkets(),    10000, [] as Market[]),
     ])
 
-    const poly      = rawPoly.sort(byVolume).slice(0, 150)
+    const poly      = rawPoly.sort(byVolume).slice(0, 200)
     const kalshi    = rawKalshi.sort(byVolume).slice(0, 120)
     const smarkets  = rawSmarkets
     const predictit = rawPredictIt
+    const betfair   = rawBetfair.sort(byVolume).slice(0, 150)
 
-    console.log(`Poly:${poly.length} Kalshi:${kalshi.length} Smarkets:${smarkets.length} PredictIt:${predictit.length}`)
+    console.log(`Poly:${poly.length} Kalshi:${kalshi.length} Smarkets:${smarkets.length} PredictIt:${predictit.length} Betfair:${betfair.length}`)
 
     // All real-money cross-platform comparisons
     const [
@@ -38,17 +41,23 @@ export async function GET() {
       polyVsPredictIt,
       smarketsVsPredictIt,
       kalshiVsSmarkets,
+      polyVsBetfair,
+      betfairVsPredictIt,
+      betfairVsSmarkets,
     ] = await Promise.all([
       poly.length      && kalshi.length     ? matchMarkets(poly,      kalshi)     : Promise.resolve([] as MarketPair[]),
       poly.length      && smarkets.length   ? matchMarkets(poly,      smarkets)   : Promise.resolve([] as MarketPair[]),
       poly.length      && predictit.length  ? matchMarkets(poly,      predictit)  : Promise.resolve([] as MarketPair[]),
       smarkets.length  && predictit.length  ? matchMarkets(smarkets,  predictit)  : Promise.resolve([] as MarketPair[]),
       kalshi.length    && smarkets.length   ? matchMarkets(kalshi,    smarkets)   : Promise.resolve([] as MarketPair[]),
+      betfair.length   && poly.length       ? matchMarkets(betfair,   poly)       : Promise.resolve([] as MarketPair[]),
+      betfair.length   && predictit.length  ? matchMarkets(betfair,   predictit)  : Promise.resolve([] as MarketPair[]),
+      betfair.length   && smarkets.length   ? matchMarkets(betfair,   smarkets)   : Promise.resolve([] as MarketPair[]),
     ])
 
     const seen = new Set<string>()
     const allPairs: MarketPair[] = []
-    for (const pair of [...polyVsKalshi, ...polyVsSmarkets, ...polyVsPredictIt, ...smarketsVsPredictIt, ...kalshiVsSmarkets]) {
+    for (const pair of [...polyVsKalshi, ...polyVsSmarkets, ...polyVsPredictIt, ...smarketsVsPredictIt, ...kalshiVsSmarkets, ...polyVsBetfair, ...betfairVsPredictIt, ...betfairVsSmarkets]) {
       if (!seen.has(pair.id)) {
         seen.add(pair.id)
         allPairs.push(pair)
@@ -69,6 +78,7 @@ export async function GET() {
         kalshi:     kalshi.length,
         smarkets:   smarkets.length,
         predictit:  predictit.length,
+        betfair:    betfair.length,
       },
       opportunitiesFound: allPairs.filter(p => p.arbOpportunity !== null).length,
       polymarketCount: poly.length,

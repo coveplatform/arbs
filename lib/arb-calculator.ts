@@ -1,7 +1,7 @@
 import { Market, ArbOpportunity } from './types'
 
 // Only real-money platforms can generate genuine arbitrage
-const REAL_MONEY = new Set(['polymarket', 'kalshi', 'smarkets', 'predictit'])
+const REAL_MONEY = new Set(['polymarket', 'kalshi', 'smarkets', 'predictit', 'betfair'])
 
 // Platform fees (approximate, applied to winnings)
 const FEES: Record<string, number> = {
@@ -9,6 +9,7 @@ const FEES: Record<string, number> = {
   kalshi:     0.07,  // ~7% take rate
   smarkets:   0.02,  // 2% exchange commission
   predictit:  0.10,  // 10% fee on profits + 5% withdrawal
+  betfair:    0.05,  // 5% commission on net winnings (market base rate)
   manifold:   0,     // play money — excluded from arb
   metaculus:  0,     // play money — excluded from arb
 }

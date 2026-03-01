@@ -1,6 +1,6 @@
 export interface Market {
   id: string
-  platform: 'polymarket' | 'kalshi' | 'manifold' | 'metaculus' | 'smarkets' | 'predictit'
+  platform: 'polymarket' | 'kalshi' | 'manifold' | 'metaculus' | 'smarkets' | 'predictit' | 'betfair'
   question: string
   yesPrice: number  // 0-1
   noPrice: number   // 0-1
