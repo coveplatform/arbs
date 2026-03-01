@@ -1,7 +1,7 @@
 import { Market } from './types'
 
 const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   'Accept': 'application/json',
   'Accept-Language': 'en-US,en;q=0.9',
 }
@@ -20,15 +20,18 @@ interface MetaculusResponse {
   results: MetaculusQuestion[]
 }
 
+// Try the original API endpoint — returns 403 from some IPs.
+// If token is set in env, pass it as auth.
 export async function fetchMetaculusMarkets(limit = 100): Promise<Market[]> {
   try {
+    const headers: Record<string, string> = { ...HEADERS }
+    if (process.env.METACULUS_TOKEN) {
+      headers['Authorization'] = `Token ${process.env.METACULUS_TOKEN}`
+    }
+
     const res = await fetch(
       `https://www.metaculus.com/api2/questions/?format=json&limit=${limit}&order_by=-number_of_forecasters&status=open&type=forecast`,
-      {
-        cache: 'no-store',
-        headers: HEADERS,
-        signal: AbortSignal.timeout(10000),
-      }
+      { cache: 'no-store', headers, signal: AbortSignal.timeout(10000) }
     )
 
     if (!res.ok) {

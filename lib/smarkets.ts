@@ -56,36 +56,39 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
   const mData = await get(`/events/${event.id}/markets/`)
   if (!mData?.markets) return []
 
-  const markets: Market[] = []
-  for (const market of mData.markets) {
-    if (market.state !== 'open') continue
-    if (seenMarkets.has(market.id)) continue
-    seenMarkets.add(market.id)
+  // Filter open, unseen markets up front
+  const openMarkets = mData.markets.filter((m: any) => {
+    if (m.state !== 'open' || seenMarkets.has(m.id)) return false
+    seenMarkets.add(m.id)
+    return true
+  })
 
+  // Process ALL markets within the event in parallel (was sequential — this was the bug)
+  const results = await Promise.all(openMarkets.map(async (market: any) => {
     const [cData, qData] = await Promise.all([
       get(`/markets/${market.id}/contracts/`),
       get(`/markets/${market.id}/quotes/`),
     ])
-    if (!cData?.contracts || !qData) continue
+    if (!cData?.contracts || !qData) return null
 
     const open = cData.contracts.filter((c: any) => c.state_or_outcome === 'open')
-    if (open.length !== 2) continue           // binary only
+    if (open.length !== 2) return null  // binary only
 
     const yesC = open.find((c: any) => c.slug === 'yes')
     const noC  = open.find((c: any) => c.slug === 'no')
-    if (!yesC || !noC) continue
+    if (!yesC || !noC) return null
 
     const yesQ = qData[yesC.id]
-    if (!yesQ) continue
+    if (!yesQ) return null
 
     const yesPrice = midpoint(yesQ.bids, yesQ.offers)
-    if (yesPrice < 0.02 || yesPrice > 0.98) continue
+    if (yesPrice < 0.02 || yesPrice > 0.98) return null
 
     const question = market.name === event.name
       ? event.name
       : `${event.name} — ${market.name}`
 
-    markets.push({
+    return {
       id:       `smarkets-${market.id}`,
       platform: 'smarkets' as const,
       question,
@@ -93,9 +96,10 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
       noPrice:  1 - yesPrice,
       volume:   0,
       url:      `https://smarkets.com/event/${event.id}/politics`,
-    })
-  }
-  return markets
+    } as Market
+  }))
+
+  return results.filter((m): m is Market => m !== null)
 }
 
 export async function fetchSmarketsMarkets(): Promise<Market[]> {
@@ -107,7 +111,7 @@ export async function fetchSmarketsMarkets(): Promise<Market[]> {
 
   // Process in small batches to avoid rate limiting
   const BATCH = 5
-  const EVENT_CAP = 15
+  const EVENT_CAP = 25
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(e => processEvent(e, seenMarkets)))

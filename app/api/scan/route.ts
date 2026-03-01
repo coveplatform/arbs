@@ -3,6 +3,7 @@ import { fetchPolymarkets } from '@/lib/polymarket'
 import { fetchKalshiMarkets } from '@/lib/kalshi'
 import { fetchSmarketsMarkets } from '@/lib/smarkets'
 import { fetchManifoldMarkets } from '@/lib/manifold'
+import { fetchMetaculusMarkets } from '@/lib/metaculus'
 import { matchMarkets } from '@/lib/matcher'
 import { Market, MarketPair, ScanResult } from '@/lib/types'
 
@@ -18,19 +19,21 @@ function byVolume(a: Market, b: Market) { return b.volume - a.volume }
 export async function GET() {
   try {
     // Fetch all platforms in parallel, each with a hard timeout
-    const [rawPoly, rawKalshi, rawSmarkets, rawManifold] = await Promise.all([
-      withTimeout(fetchPolymarkets(),      10000, [] as Market[]),
-      withTimeout(fetchKalshiMarkets(150), 8000,  [] as Market[]),
-      withTimeout(fetchSmarketsMarkets(),  20000, [] as Market[]),
-      withTimeout(fetchManifoldMarkets(),  15000, [] as Market[]),
+    const [rawPoly, rawKalshi, rawSmarkets, rawManifold, rawMetaculus] = await Promise.all([
+      withTimeout(fetchPolymarkets(),       10000, [] as Market[]),
+      withTimeout(fetchKalshiMarkets(150),  8000,  [] as Market[]),
+      withTimeout(fetchSmarketsMarkets(),   20000, [] as Market[]),
+      withTimeout(fetchManifoldMarkets(),   15000, [] as Market[]),
+      withTimeout(fetchMetaculusMarkets(100), 10000, [] as Market[]),
     ])
 
-    const poly     = rawPoly.sort(byVolume).slice(0, 120)
-    const kalshi   = rawKalshi.sort(byVolume).slice(0, 100)
-    const smarkets = rawSmarkets
-    const manifold = rawManifold.sort(byVolume).slice(0, 150)
+    const poly      = rawPoly.sort(byVolume).slice(0, 120)
+    const kalshi    = rawKalshi.sort(byVolume).slice(0, 100)
+    const smarkets  = rawSmarkets
+    const manifold  = rawManifold.sort(byVolume).slice(0, 150)
+    const metaculus = rawMetaculus.sort(byVolume).slice(0, 100)
 
-    console.log(`Poly:${poly.length} Kalshi:${kalshi.length} Smarkets:${smarkets.length} Manifold:${manifold.length}`)
+    console.log(`Poly:${poly.length} Kalshi:${kalshi.length} Smarkets:${smarkets.length} Manifold:${manifold.length} Metaculus:${metaculus.length}`)
 
     // Run cross-platform comparisons in parallel (2 GPT batches each = fast)
     const [
@@ -38,17 +41,19 @@ export async function GET() {
       polyVsSmarkets,
       polyVsManifold,
       smarketsVsManifold,
+      polyVsMetaculus,
     ] = await Promise.all([
-      poly.length   && kalshi.length   ? matchMarkets(poly,     kalshi)   : Promise.resolve([] as MarketPair[]),
-      poly.length   && smarkets.length ? matchMarkets(poly,     smarkets) : Promise.resolve([] as MarketPair[]),
-      poly.length   && manifold.length ? matchMarkets(poly,     manifold) : Promise.resolve([] as MarketPair[]),
-      smarkets.length && manifold.length ? matchMarkets(smarkets, manifold) : Promise.resolve([] as MarketPair[]),
+      poly.length     && kalshi.length     ? matchMarkets(poly,     kalshi)     : Promise.resolve([] as MarketPair[]),
+      poly.length     && smarkets.length   ? matchMarkets(poly,     smarkets)   : Promise.resolve([] as MarketPair[]),
+      poly.length     && manifold.length   ? matchMarkets(poly,     manifold)   : Promise.resolve([] as MarketPair[]),
+      smarkets.length && manifold.length   ? matchMarkets(smarkets, manifold)   : Promise.resolve([] as MarketPair[]),
+      poly.length     && metaculus.length  ? matchMarkets(poly,     metaculus)  : Promise.resolve([] as MarketPair[]),
     ])
 
     // Merge, deduplicating by pair id
     const seen = new Set<string>()
     const allPairs: MarketPair[] = []
-    for (const pair of [...polyVsKalshi, ...polyVsSmarkets, ...polyVsManifold, ...smarketsVsManifold]) {
+    for (const pair of [...polyVsKalshi, ...polyVsSmarkets, ...polyVsManifold, ...smarketsVsManifold, ...polyVsMetaculus]) {
       if (!seen.has(pair.id)) {
         seen.add(pair.id)
         allPairs.push(pair)
@@ -69,6 +74,7 @@ export async function GET() {
         kalshi:     kalshi.length,
         smarkets:   smarkets.length,
         manifold:   manifold.length,
+        metaculus:  metaculus.length,
       },
       opportunitiesFound: allPairs.filter(p => p.arbOpportunity !== null).length,
       polymarketCount: poly.length,
