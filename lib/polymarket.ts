@@ -25,7 +25,8 @@ async function tryFetch(url: string): Promise<PolymarketRaw[]> {
       signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) return []
-    return res.json()
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
   } catch {
     return []
   }
@@ -54,21 +55,25 @@ function toMarket(m: PolymarketRaw): Market | null {
 }
 
 export async function fetchPolymarkets(): Promise<Market[]> {
-  // Fetch top-volume + multiple category tags in parallel
-  const tagSlugs = ['politics', 'trump', 'us-elections', 'economics', 'science', 'elections', 'congress', 'world']
-  const fetches = [
-    tryFetch(`${BASE}&limit=200`),
-    ...tagSlugs.map(tag => tryFetch(`${BASE}&limit=100&tag_slug=${tag}`)),
-  ]
+  // Top-volume markets (global breadth)
+  const topFetch = tryFetch(`${BASE}&limit=200`)
 
-  const results = await Promise.all(fetches)
-  const [topData, ...tagResults] = results
-  const totalTagged = tagResults.reduce((n, r) => n + r.length, 0)
+  // US-politics keyword searches — targeting topics PredictIt covers
+  const keywords = [
+    'trump', 'senate', 'speaker', 'congress', 'pardon',
+    'netanyahu', 'israel', 'cabinet', 'impeach', 'federal reserve',
+    'house seat', 'democrat', 'republican', 'election 2026',
+  ]
+  const keywordFetches = keywords.map(kw =>
+    tryFetch(`${BASE}&limit=50&search=${encodeURIComponent(kw)}`)
+  )
+
+  const [topData, ...kwResults] = await Promise.all([topFetch, ...keywordFetches])
 
   const seen = new Set<string>()
   const markets: Market[] = []
 
-  for (const batch of [topData, ...tagResults]) {
+  for (const batch of [topData, ...kwResults]) {
     for (const m of batch) {
       if (!m.active || m.closed || seen.has(m.id)) continue
       seen.add(m.id)
@@ -77,9 +82,10 @@ export async function fetchPolymarkets(): Promise<Market[]> {
     }
   }
 
-  // Sort by volume so highest-confidence markets go first into GPT batches
+  // Sort by volume — highest-volume markets go first into GPT batches
   markets.sort((a, b) => b.volume - a.volume)
 
-  console.log(`Polymarket: ${topData.length} top-vol + ${totalTagged} tagged = ${markets.length} unique`)
+  const kwTotal = kwResults.reduce((n, r) => n + r.length, 0)
+  console.log(`Polymarket: ${topData.length} top-vol + ${kwTotal} keyword = ${markets.length} unique`)
   return markets
 }
