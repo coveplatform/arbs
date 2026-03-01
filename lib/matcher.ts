@@ -4,7 +4,8 @@ import { calculateArb } from './arb-calculator'
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-const SPORTS_PATTERNS = [
+const EXCLUDE_PATTERNS = [
+  // Sports
   /\bvs\.\b/i, /map \d/i, /starcraft/i, /o\/u \d\.?\d*/i,
   /both teams to score/i, /handicap/i, /match winner/i,
   /set \d winner/i, /game \d winner/i, /temperature in/i,
@@ -12,10 +13,15 @@ const SPORTS_PATTERNS = [
   /win the.*bundesliga/i, /win the.*serie a/i, /win the.*la liga/i,
   /\bnba\b/i, /\bnfl\b/i, /\bmlb\b/i, /\bnhl\b/i,
   /\bworld cup\b/i, /\bsuper bowl\b/i, /\bchampionship\b.*game/i,
+  // Crypto / price speculation (high-volume on Polymarket but unmatchable elsewhere)
+  /\b(bitcoin|ethereum|solana|dogecoin|cardano|ripple)\b/i,
+  /\b(btc|eth|sol|doge|xrp|bnb|ada|avax|matic|link)\b/i,
+  /will.*price (reach|hit|exceed|cross|drop|fall|go)/i,
+  /\$\d[\d,.]*[km]?\s*(by|before|end|in \d)/i,
 ]
 
-function isNonSports(market: Market): boolean {
-  return !SPORTS_PATTERNS.some(p => p.test(market.question))
+function isMatchable(market: Market): boolean {
+  return !EXCLUDE_PATTERNS.some(p => p.test(market.question))
 }
 
 // Compare a slice of A against a slice of B, returning matched pairs
@@ -72,16 +78,19 @@ export async function matchMarkets(
   marketsA: Market[],
   marketsB: Market[]
 ): Promise<MarketPair[]> {
-  const filteredA = marketsA.filter(isNonSports)
-  const filteredB = marketsB.filter(isNonSports)
+  const filteredA = marketsA.filter(isMatchable)
+  const filteredB = marketsB.filter(isMatchable)
   if (!filteredA.length || !filteredB.length) return []
 
-  const BATCH = 60  // markets per slice
+  console.log(`matchMarkets: ${filteredA[0]?.platform}(${filteredA.length}) × ${filteredB[0]?.platform}(${filteredB.length})`)
 
-  // 2 GPT calls per comparison pair: top-A vs top-B, then top-A vs next-B
+  const BATCH = 50  // markets per slice
+
+  // 3 GPT calls per comparison pair covering A[0:50]×B[0:50], A[0:50]×B[50:100], A[50:100]×B[0:50]
   const batches: Array<{ a: Market[]; b: Market[] }> = [
-    { a: filteredA.slice(0, BATCH),      b: filteredB.slice(0, BATCH) },
-    { a: filteredA.slice(0, BATCH),      b: filteredB.slice(BATCH, BATCH * 2) },
+    { a: filteredA.slice(0, BATCH),        b: filteredB.slice(0, BATCH) },
+    { a: filteredA.slice(0, BATCH),        b: filteredB.slice(BATCH, BATCH * 2) },
+    { a: filteredA.slice(BATCH, BATCH * 2), b: filteredB.slice(0, BATCH) },
   ].filter(({ a, b }) => a.length > 0 && b.length > 0)
 
   const batchResults = await Promise.all(
