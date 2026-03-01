@@ -83,23 +83,17 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
   }
 
   const results = await Promise.all(openMarkets.map(async (market: any) => {
-    const [cData, qData] = await Promise.all([
-      get(`/markets/${market.id}/contracts/`),
-      get(`/markets/${market.id}/quotes/`),
-    ])
+    // Only need contracts — last_traded_price avoids empty-orderbook problem
+    const cData = await get(`/markets/${market.id}/contracts/`)
     if (!cData?.contracts) return null
 
-    // Accept open, live, or active contracts
     const allContracts = cData.contracts
     const open = allContracts.filter((c: any) =>
       c.state_or_outcome === 'open' || c.state_or_outcome === 'live' || c.state_or_outcome === 'active'
     )
 
-    // Log first market of first event for debugging
-    if (market.id === openMarkets[0]?.id && event === (global as any).__smDebugEvent) {
-      console.log(`SM debug market ${market.id}: contracts=${allContracts.length} open=${open.length} slugs=[${allContracts.slice(0,4).map((c:any)=>c.slug+':'+c.state_or_outcome).join(',')}]`)
-      const keys = Object.keys(qData ?? {}).slice(0, 3)
-      console.log(`SM debug quotes keys: [${keys.join(',')}] quotes_subkey=${!!qData?.quotes}`)
+    if (event === (global as any).__smDebugEvent && market.id === openMarkets[0]?.id) {
+      console.log(`SM debug market ${market.id}: total=${allContracts.length} open=${open.length} sample=[${allContracts.slice(0,3).map((c:any)=>`${c.slug}:${c.state_or_outcome}:ltp=${c.last_traded_price}`).join(' | ')}]`)
     }
 
     if (open.length !== 2) return null
@@ -108,15 +102,17 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
     const isNo  = (c: any) => /^no/i.test(c.slug ?? '')  || /^no/i.test(c.display_name ?? '')
     const yesC  = open.find(isYes) ?? open[0]
     const noC   = open.find(isNo)  ?? open[1]
-    if (yesC === noC) return null  // same contract matched both
+    if (yesC === noC) return null
 
-    const quotesMap = qData?.quotes ?? qData ?? {}
-    const yesQ = quotesMap[yesC.id] ?? quotesMap[String(yesC.id)]
+    // last_traded_price is in basis points (0–10000). Try live quotes as fallback.
+    let yesPrice = yesC.last_traded_price ? yesC.last_traded_price / 10000 : 0
 
-    let yesPrice = yesQ ? midpoint(yesQ.bids, yesQ.offers) : 0
-
-    if (!yesPrice && yesC.last_traded_price) {
-      yesPrice = yesC.last_traded_price / 10000
+    if (!yesPrice) {
+      // Fall back to quotes for live orderbook midpoint
+      const qData = await get(`/markets/${market.id}/quotes/`)
+      const quotesMap = qData ?? {}
+      const yesQ = quotesMap[yesC.id] ?? quotesMap[String(yesC.id)]
+      if (yesQ) yesPrice = midpoint(yesQ.bids, yesQ.offers)
     }
 
     if (!yesPrice || yesPrice < 0.02 || yesPrice > 0.98) return null
