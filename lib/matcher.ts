@@ -34,7 +34,10 @@ export async function matchBatch(
   const aList = aSlice.map((m, i) => `A${i}: ${m.question}`).join('\n')
   const bList = bSlice.map((m, i) => `B${i}: ${m.question}`).join('\n')
 
-  const prompt = `Find prediction market pairs asking about the EXACT SAME real-world outcome.
+  console.log(`matchBatch A[0..4]: ${aSlice.slice(0,5).map(m=>m.question).join(' | ')}`)
+  console.log(`matchBatch B[0..4]: ${bSlice.slice(0,5).map(m=>m.question).join(' | ')}`)
+
+  const prompt = `You are matching prediction markets from two platforms to find pairs covering the same real-world event.
 
 POOL A (${aSlice[0].platform}):
 ${aList}
@@ -42,18 +45,25 @@ ${aList}
 POOL B (${bSlice[0].platform}):
 ${bList}
 
-Rules:
-- Match ONLY if both markets resolve based on the same specific event AND same person/entity AND same direction.
-- "Will Trump be impeached?" matches "Will the House impeach Trump?" — same event.
-- "Will Trump serve his full term?" does NOT match "Will China invade Taiwan?" — different events.
-- "Will Macron resign before 2027?" matches "Will Macron leave office early?" — same outcome.
-- Same topic / same year is NOT enough — must be same specific outcome.
-- Minimum similarity: 0.75
+Match pairs where both markets will resolve YES or NO based on essentially the same real-world outcome.
+Wording can differ — what matters is the underlying event.
 
-Return JSON array only (no markdown):
-[{"aIndex":0,"bIndex":2,"similarity":0.85,"reason":"both resolve on Trump impeachment by House"}]
+Good matches (include these):
+- "Will Republicans control the Senate after 2026?" ↔ "Will the GOP hold the Senate majority?" (same outcome)
+- "Will the Fed cut rates in Q1?" ↔ "Federal Reserve rate cut by March?" (same event)
+- "Will Trump sign the tax bill?" ↔ "Tax Cut Act passed in 2025?" (same outcome)
+- "Will Macron resign before 2027?" ↔ "Will Macron leave office early?" (same outcome)
 
-Return [] if no genuine matches.`
+Not a match (exclude these):
+- "Will Trump be impeached?" ↔ "Will Republicans win in 2026?" (different outcomes)
+- Two markets about the same topic but different specific outcomes
+
+Minimum confidence: 0.70. When in doubt, include the match.
+
+Return ONLY a JSON array, no markdown:
+[{"aIndex":0,"bIndex":2,"similarity":0.82,"reason":"both resolve on same Fed rate decision"}]
+
+If no matches exist, return: []`
 
   try {
     const res = await client.chat.completions.create({
