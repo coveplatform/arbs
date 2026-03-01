@@ -68,11 +68,19 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
   const mData = await get(`/events/${event.id}/markets/`)
   if (!mData?.markets) return []
 
-  const openMarkets = mData.markets.filter((m: any) => {
-    if (m.state !== 'open' || seenMarkets.has(m.id)) return false
+  // Accept open OR live markets (Smarkets uses both states for tradeable markets)
+  const allMarkets = mData.markets
+  const openMarkets = allMarkets.filter((m: any) => {
+    const tradeable = m.state === 'open' || m.state === 'live' || m.state === 'active'
+    if (!tradeable || seenMarkets.has(m.id)) return false
     seenMarkets.add(m.id)
     return true
   })
+
+  // Debug first event to understand structure
+  if (event === (global as any).__smDebugEvent) {
+    console.log(`SM debug event ${event.id}: total=${allMarkets.length} tradeable=${openMarkets.length} states=[${[...new Set(allMarkets.map((m:any)=>m.state))].join(',')}]`)
+  }
 
   const results = await Promise.all(openMarkets.map(async (market: any) => {
     const [cData, qData] = await Promise.all([
@@ -81,29 +89,36 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
     ])
     if (!cData?.contracts) return null
 
-    const open = cData.contracts.filter((c: any) => c.state_or_outcome === 'open')
+    // Accept open, live, or active contracts
+    const allContracts = cData.contracts
+    const open = allContracts.filter((c: any) =>
+      c.state_or_outcome === 'open' || c.state_or_outcome === 'live' || c.state_or_outcome === 'active'
+    )
+
+    // Log first market of first event for debugging
+    if (market.id === openMarkets[0]?.id && event === (global as any).__smDebugEvent) {
+      console.log(`SM debug market ${market.id}: contracts=${allContracts.length} open=${open.length} slugs=[${allContracts.slice(0,4).map((c:any)=>c.slug+':'+c.state_or_outcome).join(',')}]`)
+      const keys = Object.keys(qData ?? {}).slice(0, 3)
+      console.log(`SM debug quotes keys: [${keys.join(',')}] quotes_subkey=${!!qData?.quotes}`)
+    }
+
     if (open.length !== 2) return null
 
-    // Smarkets uses 'yes'/'no' slugs OR outcome-name slugs
-    // Try slug match first, fall back to first/second contract
     const isYes = (c: any) => /^yes/i.test(c.slug ?? '') || /^yes/i.test(c.display_name ?? '')
     const isNo  = (c: any) => /^no/i.test(c.slug ?? '')  || /^no/i.test(c.display_name ?? '')
     const yesC  = open.find(isYes) ?? open[0]
     const noC   = open.find(isNo)  ?? open[1]
+    if (yesC === noC) return null  // same contract matched both
 
-    // Smarkets quotes response: { quotes: { "CONTRACT_ID": { bids, offers } } }
-    // Fall back to flat map in case API version differs
     const quotesMap = qData?.quotes ?? qData ?? {}
     const yesQ = quotesMap[yesC.id] ?? quotesMap[String(yesC.id)]
 
     let yesPrice = yesQ ? midpoint(yesQ.bids, yesQ.offers) : 0
 
-    // Fallback: last traded price (stored as basis points 0-10000)
     if (!yesPrice && yesC.last_traded_price) {
       yesPrice = yesC.last_traded_price / 10000
     }
 
-    // If still no price, skip — don't include illiquid/untouched markets
     if (!yesPrice || yesPrice < 0.02 || yesPrice > 0.98) return null
 
     const question = market.name === event.name
@@ -135,6 +150,9 @@ export async function fetchSmarketsMarkets(): Promise<Market[]> {
   const seenMarkets = new Set<string>()
   const EVENT_CAP = 40
   const BATCH = 6
+
+  // Mark first event for debug logging
+  ;(global as any).__smDebugEvent = events[0]
 
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
