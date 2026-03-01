@@ -1,27 +1,32 @@
 import { Market } from './types'
 
 const API = 'https://api.smarkets.com/v3'
-const H   = { Accept: 'application/json' }
+const HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+}
 
-async function get(path: string, retries = 1): Promise<any> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(`${API}${path}`, {
-        headers: H, cache: 'no-store', signal: AbortSignal.timeout(7000),
+async function get(path: string): Promise<any> {
+  try {
+    const res = await fetch(`${API}${path}`, {
+      headers: HEADERS,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.status === 429) {
+      await new Promise(r => setTimeout(r, 1500))
+      // one retry
+      const r2 = await fetch(`${API}${path}`, {
+        headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(8000),
       })
-      if (res.status === 429) {
-        // Rate limited — wait and retry
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
-        continue
-      }
-      if (!res.ok) return null
-      return res.json()
-    } catch {
-      if (attempt === retries) return null
-      await new Promise(r => setTimeout(r, 500))
+      if (!r2.ok) return null
+      return r2.json()
     }
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
   }
-  return null
 }
 
 function midpoint(bids: any[], offers: any[]): number {
@@ -31,39 +36,44 @@ function midpoint(bids: any[], offers: any[]): number {
   return ((b || o) + (o || b)) / 2 / 10000
 }
 
-// Fetch events across multiple categories
 async function fetchEvents(): Promise<any[]> {
-  const [politics, currentAffairs, current] = await Promise.all([
-    get('/events/?type=politics&state=upcoming&limit=100'),
-    get('/events/?type=current-affairs&state=upcoming&limit=50'),
-    get('/events/?state=upcoming&limit=50&with_bettable_children=true'),
-  ])
-  const all = [
-    ...(politics?.events ?? []),
-    ...(currentAffairs?.events ?? []),
-    ...(current?.events ?? []),
+  // Try multiple Smarkets category slugs in parallel
+  const queries = [
+    '/events/?type=politics&state=upcoming&sort=id&limit=100',
+    '/events/?type=current-affairs&state=upcoming&sort=id&limit=100',
+    '/events/?type=american-politics&state=upcoming&sort=id&limit=100',
+    '/events/?type=world-politics&state=upcoming&sort=id&limit=100',
+    '/events/?type=economics&state=upcoming&sort=id&limit=50',
+    '/events/?state=upcoming&sort=id&limit=50&with_bettable_children=true',
   ]
-  // Deduplicate by event id
+
+  const results = await Promise.all(queries.map(q => get(q)))
+  const all: any[] = []
   const seen = new Set<string>()
-  return all.filter(e => {
-    if (seen.has(e.id)) return false
-    seen.add(e.id)
-    return true
-  })
+
+  for (const r of results) {
+    for (const e of r?.events ?? []) {
+      if (!seen.has(e.id)) {
+        seen.add(e.id)
+        all.push(e)
+      }
+    }
+  }
+
+  console.log(`Smarkets: ${all.length} events found across all categories`)
+  return all
 }
 
 async function processEvent(event: any, seenMarkets: Set<string>): Promise<Market[]> {
   const mData = await get(`/events/${event.id}/markets/`)
   if (!mData?.markets) return []
 
-  // Filter open, unseen markets up front
   const openMarkets = mData.markets.filter((m: any) => {
     if (m.state !== 'open' || seenMarkets.has(m.id)) return false
     seenMarkets.add(m.id)
     return true
   })
 
-  // Process ALL markets within the event in parallel (was sequential — this was the bug)
   const results = await Promise.all(openMarkets.map(async (market: any) => {
     const [cData, qData] = await Promise.all([
       get(`/markets/${market.id}/contracts/`),
@@ -72,7 +82,7 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
     if (!cData?.contracts || !qData) return null
 
     const open = cData.contracts.filter((c: any) => c.state_or_outcome === 'open')
-    if (open.length !== 2) return null  // binary only
+    if (open.length !== 2) return null
 
     const yesC = open.find((c: any) => c.slug === 'yes')
     const noC  = open.find((c: any) => c.slug === 'no')
@@ -104,22 +114,25 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
 
 export async function fetchSmarketsMarkets(): Promise<Market[]> {
   const events = await fetchEvents()
-  if (events.length === 0) return []
+  if (events.length === 0) {
+    console.log('Smarkets: no events returned')
+    return []
+  }
 
   const results: Market[] = []
   const seenMarkets = new Set<string>()
+  const EVENT_CAP = 40
+  const BATCH = 6
 
-  // Process in small batches to avoid rate limiting
-  const BATCH = 5
-  const EVENT_CAP = 25
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(e => processEvent(e, seenMarkets)))
     for (const r of batchResults) results.push(...r)
     if (i + BATCH < Math.min(events.length, EVENT_CAP)) {
-      await new Promise(r => setTimeout(r, 100))
+      await new Promise(r => setTimeout(r, 150))
     }
   }
 
+  console.log(`Smarkets: ${results.length} markets from ${Math.min(events.length, EVENT_CAP)} events`)
   return results
 }
