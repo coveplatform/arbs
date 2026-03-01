@@ -3,6 +3,8 @@ import { Market } from './types'
 // Betfair's public readonly exchange API (used by their website without login)
 // Political markets = event type 2378961
 const BF_READONLY = 'https://www.betfair.com/www/sports/exchange/readonly/v1.0'
+// nzIFcwyWhrlwYa3D is Betfair's publicly documented demo app key
+const BF_AK = 'nzIFcwyWhrlwYa3D'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -36,17 +38,18 @@ function decimalToProb(decimal: number): number {
 }
 
 export async function fetchBetfairMarkets(): Promise<Market[]> {
-  // Fetch political markets overview (event type 2378961 = Politics)
-  // Also try 468328 (current affairs) and 2764691 (US Politics)
-  const [politicsData, usData] = await Promise.all([
-    bfGet('/byeventtype?eventTypeIds=2378961&alt=json&locale=en_GB&types=MARKET_CATALOGUE,MARKET_ODDS'),
-    bfGet('/byeventtype?eventTypeIds=2764691&alt=json&locale=en_GB&types=MARKET_CATALOGUE,MARKET_ODDS'),
+  // Fetch political markets — try multiple URL patterns
+  // Betfair's documented demo app key: nzIFcwyWhrlwYa3D
+  const [politicsData, usData, specialsData] = await Promise.all([
+    bfGet(`/byeventtype?eventTypeIds=2378961&alt=json&locale=en_GB&_ak=${BF_AK}&types=MARKET_CATALOGUE,MARKET_ODDS`),
+    bfGet(`/byeventtype?eventTypeIds=2764691&alt=json&locale=en_GB&_ak=${BF_AK}&types=MARKET_CATALOGUE,MARKET_ODDS`),
+    bfGet(`/byeventtype?eventTypeIds=2378961&alt=json&_ak=${BF_AK}`),
   ])
 
   const markets: Market[] = []
   const seen = new Set<string>()
 
-  for (const data of [politicsData, usData]) {
+  for (const data of [politicsData, usData, specialsData]) {
     if (!data) continue
 
     // Try various response shapes Betfair might return
