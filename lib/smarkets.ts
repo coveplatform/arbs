@@ -3,11 +3,11 @@ import { Market } from './types'
 const API = 'https://api.smarkets.com/v3'
 const H   = { Accept: 'application/json' }
 
-async function get(path: string, retries = 2): Promise<any> {
+async function get(path: string, retries = 1): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${API}${path}`, {
-        headers: H, cache: 'no-store', signal: AbortSignal.timeout(12000),
+        headers: H, cache: 'no-store', signal: AbortSignal.timeout(4000),
       })
       if (res.status === 429) {
         // Rate limited — wait and retry
@@ -106,14 +106,14 @@ export async function fetchSmarketsMarkets(): Promise<Market[]> {
   const seenMarkets = new Set<string>()
 
   // Process in small batches to avoid rate limiting
-  const BATCH = 4
-  const EVENT_CAP = 80
+  const BATCH = 5
+  const EVENT_CAP = 20
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(e => processEvent(e, seenMarkets)))
     for (const r of batchResults) results.push(...r)
     if (i + BATCH < Math.min(events.length, EVENT_CAP)) {
-      await new Promise(r => setTimeout(r, 150))
+      await new Promise(r => setTimeout(r, 100))
     }
   }
 

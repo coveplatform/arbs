@@ -74,26 +74,13 @@ export async function matchMarkets(
   const filteredB = marketsB.filter(isNonSports)
   if (!filteredA.length || !filteredB.length) return []
 
-  const BATCH = 50  // markets per slice — smaller = more focused matches
+  const BATCH = 60  // markets per slice
 
-  // Build a grid of (aSlice, bSlice) pairs, capped at 4 total GPT calls
-  const aChunks: Market[][] = []
-  for (let i = 0; i < Math.min(filteredA.length, BATCH * 2); i += BATCH) {
-    aChunks.push(filteredA.slice(i, i + BATCH))
-  }
-  const bChunks: Market[][] = []
-  for (let j = 0; j < Math.min(filteredB.length, BATCH * 2); j += BATCH) {
-    bChunks.push(filteredB.slice(j, j + BATCH))
-  }
-
-  const batches: Array<{ a: Market[]; b: Market[] }> = []
-  for (const a of aChunks) {
-    for (const b of bChunks) {
-      batches.push({ a, b })
-      if (batches.length >= 4) break  // cap at 4 GPT calls per pair
-    }
-    if (batches.length >= 4) break
-  }
+  // 2 GPT calls per comparison pair: top-A vs top-B, then top-A vs next-B
+  const batches: Array<{ a: Market[]; b: Market[] }> = [
+    { a: filteredA.slice(0, BATCH),      b: filteredB.slice(0, BATCH) },
+    { a: filteredA.slice(0, BATCH),      b: filteredB.slice(BATCH, BATCH * 2) },
+  ].filter(({ a, b }) => a.length > 0 && b.length > 0)
 
   const batchResults = await Promise.all(
     batches.map(({ a, b }) => matchBatch(a, b))

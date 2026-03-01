@@ -111,15 +111,30 @@ export async function fetchManifoldSearch(): Promise<Market[]> {
   return all
 }
 
-// Combined: top-by-liquidity + keyword search, deduplicated
+async function fetchManifoldBySort(sort: string, limit = 200): Promise<Market[]> {
+  try {
+    const res = await fetch(
+      `${API}/markets?limit=${limit}&sort=${sort}&filter=open&contractType=BINARY`,
+      { cache: 'no-store', signal: AbortSignal.timeout(8000) }
+    )
+    if (!res.ok) return []
+    const data: ManifoldMarket[] = await res.json()
+    return (Array.isArray(data) ? data : [])
+      .filter(isValid)
+      .map(toMarket)
+      .filter(m => m.yesPrice > 0.02 && m.yesPrice < 0.98)
+  } catch { return [] }
+}
+
+// Fast combined fetch: top-by-liquidity + top-by-volume (two API calls, no keyword search)
 export async function fetchManifoldMarkets(): Promise<Market[]> {
-  const [top, searched] = await Promise.all([
-    fetchManifoldTop(300),
-    fetchManifoldSearch(),
+  const [byLiquidity, byVolume] = await Promise.all([
+    fetchManifoldBySort('liquidity', 200),
+    fetchManifoldBySort('volume',    200),
   ])
   const seen = new Set<string>()
   const all: Market[] = []
-  for (const m of [...top, ...searched]) {
+  for (const m of [...byLiquidity, ...byVolume]) {
     if (!seen.has(m.id)) {
       seen.add(m.id)
       all.push(m)
