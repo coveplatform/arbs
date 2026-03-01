@@ -111,33 +111,33 @@ export async function fetchManifoldSearch(): Promise<Market[]> {
   return all
 }
 
-async function fetchManifoldBySort(sort: string, limit = 200): Promise<Market[]> {
-  try {
-    const res = await fetch(
-      `${API}/markets?limit=${limit}&sort=${sort}&filter=open&contractType=BINARY`,
-      { cache: 'no-store', signal: AbortSignal.timeout(8000) }
-    )
-    if (!res.ok) return []
-    const data: ManifoldMarket[] = await res.json()
-    return (Array.isArray(data) ? data : [])
-      .filter(isValid)
-      .map(toMarket)
-      .filter(m => m.yesPrice > 0.02 && m.yesPrice < 0.98)
-  } catch { return [] }
-}
+// Broad search terms — 12 parallel calls, ~2s total, covers all major market categories
+const BROAD_TERMS = [
+  'trump', 'election 2026', 'president',
+  'russia ukraine', 'china taiwan',
+  'federal reserve rate', 'recession',
+  'bitcoin', 'ai regulation',
+  'uk prime minister', 'macron', 'modi',
+]
 
-// Fast combined fetch: top-by-liquidity + top-by-volume (two API calls, no keyword search)
+// Combined: top-by-liquidity (single fast call) + broad keyword search (12 parallel)
 export async function fetchManifoldMarkets(): Promise<Market[]> {
-  const [byLiquidity, byVolume] = await Promise.all([
-    fetchManifoldBySort('liquidity', 200),
-    fetchManifoldBySort('volume',    200),
+  const [top, ...searched] = await Promise.all([
+    fetchManifoldTop(200),
+    ...BROAD_TERMS.map(t => search(t, 20)),
   ])
   const seen = new Set<string>()
   const all: Market[] = []
-  for (const m of [...byLiquidity, ...byVolume]) {
-    if (!seen.has(m.id)) {
-      seen.add(m.id)
-      all.push(m)
+  for (const m of top) {
+    if (!seen.has(m.id)) { seen.add(m.id); all.push(m) }
+  }
+  for (const batch of searched) {
+    for (const m of batch) {
+      if (!seen.has(m.id) && isValid(m)) {
+        seen.add(m.id)
+        const market = toMarket(m)
+        if (market.yesPrice > 0.02 && market.yesPrice < 0.98) all.push(market)
+      }
     }
   }
   return all

@@ -107,7 +107,7 @@ export async function fetchSmarketsMarkets(): Promise<Market[]> {
 
   // Process in small batches to avoid rate limiting
   const BATCH = 5
-  const EVENT_CAP = 20
+  const EVENT_CAP = 35
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(e => processEvent(e, seenMarkets)))

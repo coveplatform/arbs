@@ -22,7 +22,7 @@ export async function GET() {
       withTimeout(fetchPolymarkets(),      10000, [] as Market[]),
       withTimeout(fetchKalshiMarkets(150), 8000,  [] as Market[]),
       withTimeout(fetchSmarketsMarkets(),  18000, [] as Market[]),
-      withTimeout(fetchManifoldMarkets(),  10000, [] as Market[]),
+      withTimeout(fetchManifoldMarkets(),  15000, [] as Market[]),
     ])
 
     const poly     = rawPoly.sort(byVolume).slice(0, 120)
