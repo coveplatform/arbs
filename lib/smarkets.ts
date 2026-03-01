@@ -92,25 +92,36 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
       c.state_or_outcome === 'open' || c.state_or_outcome === 'live' || c.state_or_outcome === 'active'
     )
 
+    // Dump first contract's full JSON so we can see all available fields
     if (event === (global as any).__smDebugEvent && market.id === openMarkets[0]?.id) {
-      console.log(`SM debug market ${market.id}: total=${allContracts.length} open=${open.length} sample=[${allContracts.slice(0,3).map((c:any)=>`${c.slug}:${c.state_or_outcome}:ltp=${c.last_traded_price}`).join(' | ')}]`)
+      console.log(`SM contract JSON: ${JSON.stringify(allContracts[0]).slice(0, 300)}`)
+      console.log(`SM market JSON: ${JSON.stringify(market).slice(0, 200)}`)
     }
 
-    if (open.length !== 2) return null
+    // Accept markets with exactly 2 open contracts (binary)
+    // OR markets where we can find explicit yes/no slugs regardless of count
+    const isYes = (c: any) => /^yes$/i.test(c.slug ?? '')
+    const isNo  = (c: any) => /^no$/i.test(c.slug ?? '')
+    const hasYesNo = open.some(isYes) && open.some(isNo)
 
-    const isYes = (c: any) => /^yes/i.test(c.slug ?? '') || /^yes/i.test(c.display_name ?? '')
-    const isNo  = (c: any) => /^no/i.test(c.slug ?? '')  || /^no/i.test(c.display_name ?? '')
-    const yesC  = open.find(isYes) ?? open[0]
-    const noC   = open.find(isNo)  ?? open[1]
-    if (yesC === noC) return null
+    if (open.length !== 2 && !hasYesNo) return null
 
-    // last_traded_price is in basis points (0–10000). Try live quotes as fallback.
-    let yesPrice = yesC.last_traded_price ? yesC.last_traded_price / 10000 : 0
+    const yesC = open.find(isYes) ?? open[0]
+    const noC  = open.find(isNo)  ?? open[1]
+    if (!yesC || !noC || yesC === noC) return null
+
+    // Try every possible price field name Smarkets might use
+    const getPrice = (c: any): number => {
+      const raw = c.last_traded_price ?? c.last_price ?? c.price ??
+                  c.best_bid_price ?? c.best_offer_price ?? c.mid_price ?? 0
+      return raw > 1 ? raw / 10000 : raw  // normalise basis-points or fraction
+    }
+
+    let yesPrice = getPrice(yesC)
 
     if (!yesPrice) {
-      // Fall back to quotes for live orderbook midpoint
       const qData = await get(`/markets/${market.id}/quotes/`)
-      const quotesMap = qData ?? {}
+      const quotesMap = qData?.quotes ?? qData ?? {}
       const yesQ = quotesMap[yesC.id] ?? quotesMap[String(yesC.id)]
       if (yesQ) yesPrice = midpoint(yesQ.bids, yesQ.offers)
     }
