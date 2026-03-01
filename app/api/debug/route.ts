@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-export const maxDuration = 60
+export const maxDuration = 30
 
 export async function GET() {
   const log: Record<string, unknown> = {}

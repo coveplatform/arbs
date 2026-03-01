@@ -7,7 +7,7 @@ import { fetchMetaculusMarkets } from '@/lib/metaculus'
 import { matchMarkets } from '@/lib/matcher'
 import { Market, MarketPair, ScanResult } from '@/lib/types'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
 function byVolume(a: Market, b: Market) { return b.volume - a.volume }
 
@@ -31,26 +31,20 @@ export async function GET() {
 
     console.log(`Poly:${poly.length} Kalshi:${kalshi.length} Smarkets:${smarkets.length} Manifold:${manifold.length} Metaculus:${metaculus.length}`)
 
-    // Run all cross-platform comparisons in parallel
-    // Priority: real-money × real-money first, then real-money × forecasting
+    // Run cross-platform comparisons in parallel
+    // Priority order: real-money × real-money first, then vs forecasting platforms
     const [
       polyVsKalshi,
       polyVsSmarkets,
       kalshiVsSmarkets,
       polyVsManifold,
       smarketsVsManifold,
-      kalshiVsManifold,
-      polyVsMetaculus,
-      smarketsVsMetaculus,
     ] = await Promise.all([
-      poly.length    && kalshi.length    ? matchMarkets(poly,     kalshi)    : Promise.resolve([] as MarketPair[]),
-      poly.length    && smarkets.length  ? matchMarkets(poly,     smarkets)  : Promise.resolve([] as MarketPair[]),
-      kalshi.length  && smarkets.length  ? matchMarkets(kalshi,   smarkets)  : Promise.resolve([] as MarketPair[]),
-      poly.length    && manifold.length  ? matchMarkets(poly,     manifold)  : Promise.resolve([] as MarketPair[]),
-      smarkets.length && manifold.length ? matchMarkets(smarkets, manifold)  : Promise.resolve([] as MarketPair[]),
-      kalshi.length  && manifold.length  ? matchMarkets(kalshi,   manifold)  : Promise.resolve([] as MarketPair[]),
-      poly.length    && metaculus.length ? matchMarkets(poly,     metaculus) : Promise.resolve([] as MarketPair[]),
-      smarkets.length && metaculus.length? matchMarkets(smarkets, metaculus) : Promise.resolve([] as MarketPair[]),
+      poly.length   && kalshi.length   ? matchMarkets(poly,     kalshi)   : Promise.resolve([] as MarketPair[]),
+      poly.length   && smarkets.length ? matchMarkets(poly,     smarkets) : Promise.resolve([] as MarketPair[]),
+      kalshi.length && smarkets.length ? matchMarkets(kalshi,   smarkets) : Promise.resolve([] as MarketPair[]),
+      poly.length   && manifold.length ? matchMarkets(poly,     manifold) : Promise.resolve([] as MarketPair[]),
+      smarkets.length && manifold.length ? matchMarkets(smarkets, manifold) : Promise.resolve([] as MarketPair[]),
     ])
 
     // Merge all pairs, deduplicating by id
@@ -58,8 +52,7 @@ export async function GET() {
     const allPairs: MarketPair[] = []
     const streams = [
       polyVsKalshi, polyVsSmarkets, kalshiVsSmarkets,
-      polyVsManifold, smarketsVsManifold, kalshiVsManifold,
-      polyVsMetaculus, smarketsVsMetaculus,
+      polyVsManifold, smarketsVsManifold,
     ]
     for (const stream of streams) {
       for (const pair of stream) {
