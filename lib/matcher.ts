@@ -39,7 +39,7 @@ export async function matchBatch(
   console.log(`matchBatch A[0..4]: ${aSlice.slice(0,5).map(m=>m.question).join(' | ')}`)
   console.log(`matchBatch B[0..4]: ${bSlice.slice(0,5).map(m=>m.question).join(' | ')}`)
 
-  const prompt = `You are matching prediction markets from two platforms to find pairs covering the same real-world event.
+  const prompt = `You are matching prediction markets from two platforms to find pairs that cover the same underlying real-world event or question.
 
 POOL A (${aSlice[0].platform}):
 ${aList}
@@ -47,25 +47,30 @@ ${aList}
 POOL B (${bSlice[0].platform}):
 ${bList}
 
-Match pairs where both markets will resolve YES or NO based on essentially the same real-world outcome.
-Wording can differ — what matters is the underlying event.
+RULES:
+1. Match if both markets resolve on the same underlying real-world event — wording, phrasing, and timeframes CAN differ.
+2. Different timeframes are OK if the question is about the same ongoing situation (e.g., "through March 2026" vs "through June 2026" for the same person's job status).
+3. Be generous — if you think there's a 60%+ chance these refer to the same event, include the match.
 
-Good matches (include these):
-- "Will Republicans control the Senate after 2026?" ↔ "Will the GOP hold the Senate majority?" (same outcome)
-- "Will the Fed cut rates in Q1?" ↔ "Federal Reserve rate cut by March?" (same event)
-- "Will Trump sign the tax bill?" ↔ "Tax Cut Act passed in 2025?" (same outcome)
-- "Will Macron resign before 2027?" ↔ "Will Macron leave office early?" (same outcome)
+EXAMPLES of valid matches (include these):
+- "Will Netanyahu remain PM?" ↔ "Will Netanyahu remain Israeli prime minister through March 2026?" → MATCH (same person, same job)
+- "Will Mike Johnson remain Speaker?" ↔ "Will Mike Johnson remain Speaker of the House through the 119th Congress?" → MATCH
+- "Republicans control Senate after 2026?" ↔ "Will the GOP hold the Senate majority?" → MATCH
+- "Will the Fed cut rates in Q1?" ↔ "Federal Reserve rate cut by March?" → MATCH
+- "Will Trump serve a full second term?" ↔ "Donald Trump to serve as president for 9+ years by end of 2030" → MATCH
+- "Will Macron leave office early?" ↔ "Will President of France be the first to leave office?" → MATCH (if A is about France)
+- "Will Mojtaba Khamenei be next Supreme Leader?" ↔ "Will Mojtaba Khamenei be next Supreme Leader of Iran?" → MATCH
 
-Not a match (exclude these):
+NOT matches (exclude these):
 - "Will Trump be impeached?" ↔ "Will Republicans win in 2026?" (different outcomes)
-- Two markets about the same topic but different specific outcomes
+- Two markets about the same topic asking about different specific people
 
-Minimum confidence: 0.70. When in doubt, include the match.
+Minimum confidence: 0.60. When uncertain, INCLUDE the match.
 
-Return ONLY a JSON array, no markdown:
-[{"aIndex":0,"bIndex":2,"similarity":0.82,"reason":"both resolve on same Fed rate decision"}]
+Return ONLY a JSON array with no markdown fences:
+[{"aIndex":0,"bIndex":2,"similarity":0.82,"reason":"same person same job Netanyahu"}]
 
-If no matches exist, return: []`
+If truly no matches exist, return: []`
 
   try {
     const res = await client.chat.completions.create({
@@ -98,11 +103,13 @@ export async function matchMarkets(
 
   const BATCH = 50  // markets per slice
 
-  // 3 GPT calls per comparison pair covering A[0:50]×B[0:50], A[0:50]×B[50:100], A[50:100]×B[0:50]
+  // 4 GPT calls per comparison pair covering the full 2×2 grid:
+  // A[0:50]×B[0:50], A[0:50]×B[50:100], A[50:100]×B[0:50], A[50:100]×B[50:100]
   const batches: Array<{ a: Market[]; b: Market[] }> = [
-    { a: filteredA.slice(0, BATCH),        b: filteredB.slice(0, BATCH) },
-    { a: filteredA.slice(0, BATCH),        b: filteredB.slice(BATCH, BATCH * 2) },
+    { a: filteredA.slice(0, BATCH),         b: filteredB.slice(0, BATCH) },
+    { a: filteredA.slice(0, BATCH),         b: filteredB.slice(BATCH, BATCH * 2) },
     { a: filteredA.slice(BATCH, BATCH * 2), b: filteredB.slice(0, BATCH) },
+    { a: filteredA.slice(BATCH, BATCH * 2), b: filteredB.slice(BATCH, BATCH * 2) },
   ].filter(({ a, b }) => a.length > 0 && b.length > 0)
 
   const batchResults = await Promise.all(
