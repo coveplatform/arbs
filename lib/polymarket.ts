@@ -70,4 +70,6 @@ export async function fetchPolymarkets(): Promise<Market[]> {
       }
     })
     .filter(m => m.yesPrice > 0.01 && m.yesPrice < 0.99)
+    // Drop markets closing in the past
+    .filter(m => !m.endDate || new Date(m.endDate) > new Date())
 }

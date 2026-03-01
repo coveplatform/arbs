@@ -5,11 +5,10 @@ import { ScanResult, MarketPair, Market } from '@/lib/types'
 
 // ── Platform config ───────────────────────────────────────────────────────────
 const P = {
-  polymarket: { color: '#4f7eff', label: 'POLY',  name: 'Polymarket' },
-  kalshi:     { color: '#00d4aa', label: 'KALS',  name: 'Kalshi'     },
-  smarkets:   { color: '#e85d4a', label: 'SMKT',  name: 'Smarkets'   },
-  manifold:   { color: '#9b6dff', label: 'MFLD',  name: 'Manifold'   },
-  metaculus:  { color: '#ff8c42', label: 'META',  name: 'Metaculus'  },
+  polymarket: { color: '#4f7eff', label: 'POLY', name: 'Polymarket' },
+  kalshi:     { color: '#00d4aa', label: 'KALS', name: 'Kalshi'     },
+  smarkets:   { color: '#e85d4a', label: 'SMKT', name: 'Smarkets'   },
+  predictit:  { color: '#f5a623', label: 'PRDT', name: 'PredictIt'  },
 } as const
 type PKey = keyof typeof P
 const plat = (k: string) => P[k as PKey] ?? { color: '#666', label: k.slice(0,4).toUpperCase(), name: k }
@@ -280,7 +279,7 @@ export default function App() {
   const [result,   setResult]   = useState<ScanResult | null>(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
-  const [filter,   setFilter]   = useState<Filter>('all')
+  const [filter,   setFilter]   = useState<Filter>('arb')
   const [lastScan, setLastScan] = useState<string | null>(null)
 
   const scan = useCallback(async () => {
@@ -387,8 +386,8 @@ export default function App() {
           maxWidth:   520,
           lineHeight: 1.7,
         }}>
-          AI cross-references Polymarket, Kalshi, Smarkets, Manifold, and Metaculus —
-          flagging when the same event is priced differently across platforms.
+          Scans Polymarket, Kalshi, Smarkets, and PredictIt — all real-money markets —
+          and flags when the same event is priced differently across platforms.
         </p>
 
         {/* Platform pills */}

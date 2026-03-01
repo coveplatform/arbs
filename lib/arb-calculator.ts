@@ -1,15 +1,22 @@
 import { Market, ArbOpportunity } from './types'
 
+// Only real-money platforms can generate genuine arbitrage
+const REAL_MONEY = new Set(['polymarket', 'kalshi', 'smarkets', 'predictit'])
+
 // Platform fees (approximate, applied to winnings)
 const FEES: Record<string, number> = {
   polymarket: 0.02,  // 2% fee on winnings
   kalshi:     0.07,  // ~7% take rate
   smarkets:   0.02,  // 2% exchange commission
-  manifold:   0,     // play money, no real fee
-  metaculus:  0,     // play money, no real fee
+  predictit:  0.10,  // 10% fee on profits + 5% withdrawal
+  manifold:   0,     // play money — excluded from arb
+  metaculus:  0,     // play money — excluded from arb
 }
 
 export function calculateArb(marketA: Market, marketB: Market): ArbOpportunity | null {
+  // Never flag arb if either side is play money
+  if (!REAL_MONEY.has(marketA.platform) || !REAL_MONEY.has(marketB.platform)) return null
+
   const feeA = FEES[marketA.platform] || 0
   const feeB = FEES[marketB.platform] || 0
 
@@ -32,7 +39,9 @@ export function calculateArb(marketA: Market, marketB: Market): ArbOpportunity |
   const bestProfit = Math.max(profit1, profit2)
 
   // Only return if genuinely profitable (>0.5% after fees)
+  // Also cap at 25% — anything higher means the markets aren't actually comparable
   if (bestProfit <= 0.005) return null
+  if (bestProfit / Math.min(cost1, cost2) > 0.25) return null
 
   const useStrategy1 = profit1 >= profit2
   const cost = useStrategy1 ? cost1 : cost2
