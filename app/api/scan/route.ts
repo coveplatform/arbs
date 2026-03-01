@@ -7,7 +7,7 @@ import { fetchBetfairMarkets } from '@/lib/betfair'
 import { matchMarkets } from '@/lib/matcher'
 import { Market, MarketPair, ScanResult } from '@/lib/types'
 
-export const maxDuration = 30
+export const maxDuration = 55
 
 function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([p, new Promise<T>(r => setTimeout(() => r(fallback), ms))])
@@ -20,7 +20,7 @@ export async function GET() {
     // Fetch all real-money platforms in parallel
     const [rawPoly, rawKalshi, rawSmarkets, rawPredictIt, rawBetfair] = await Promise.all([
       withTimeout(fetchPolymarkets(),       12000, [] as Market[]),
-      withTimeout(fetchKalshiMarkets(200),  8000,  [] as Market[]),
+      withTimeout(fetchKalshiMarkets(),     12000,  [] as Market[]),
       withTimeout(fetchSmarketsMarkets(),   20000, [] as Market[]),
       withTimeout(fetchPredictItMarkets(),  10000, [] as Market[]),
       Promise.resolve([] as Market[]), // Betfair: 403 from Vercel IPs, disabled
