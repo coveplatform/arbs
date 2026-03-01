@@ -20,7 +20,7 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'arb. — find free money in prediction markets',
-  description: 'AI-powered arbitrage scanner across Polymarket, Manifold & Metaculus',
+  description: 'Real-time arbitrage scanner across Polymarket, Kalshi, Smarkets, and PredictIt. AI-powered market matching finds guaranteed profit opportunities across prediction markets.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
