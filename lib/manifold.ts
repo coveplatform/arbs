@@ -1,6 +1,11 @@
 import { Market } from './types'
 
 const API = 'https://api.manifold.markets/v0'
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+}
 
 interface ManifoldMarket {
   id: string
@@ -37,7 +42,7 @@ export async function fetchManifoldTop(limit = 300): Promise<Market[]> {
   try {
     const res = await fetch(
       `${API}/markets?limit=${limit}&sort=liquidity&filter=open&contractType=BINARY`,
-      { cache: 'no-store', signal: AbortSignal.timeout(10000) }
+      { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(10000) }
     )
     if (!res.ok) return []
     const data: ManifoldMarket[] = await res.json()
@@ -52,7 +57,7 @@ async function search(term: string, limit = 20): Promise<ManifoldMarket[]> {
   try {
     const res = await fetch(
       `${API}/search-markets?term=${encodeURIComponent(term)}&limit=${limit}&sort=score`,
-      { cache: 'no-store', signal: AbortSignal.timeout(8000) }
+      { headers: HEADERS, cache: 'no-store', signal: AbortSignal.timeout(8000) }
     )
     if (!res.ok) return []
     const data = await res.json()

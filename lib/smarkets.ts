@@ -7,7 +7,7 @@ async function get(path: string, retries = 1): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`${API}${path}`, {
-        headers: H, cache: 'no-store', signal: AbortSignal.timeout(4000),
+        headers: H, cache: 'no-store', signal: AbortSignal.timeout(7000),
       })
       if (res.status === 429) {
         // Rate limited — wait and retry
@@ -107,7 +107,7 @@ export async function fetchSmarketsMarkets(): Promise<Market[]> {
 
   // Process in small batches to avoid rate limiting
   const BATCH = 5
-  const EVENT_CAP = 35
+  const EVENT_CAP = 15
   for (let i = 0; i < Math.min(events.length, EVENT_CAP); i += BATCH) {
     const batch = events.slice(i, i + BATCH)
     const batchResults = await Promise.all(batch.map(e => processEvent(e, seenMarkets)))
