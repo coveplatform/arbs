@@ -23,7 +23,7 @@ export async function GET() {
       withTimeout(fetchKalshiMarkets(200),  8000,  [] as Market[]),
       withTimeout(fetchSmarketsMarkets(),   20000, [] as Market[]),
       withTimeout(fetchPredictItMarkets(),  10000, [] as Market[]),
-      withTimeout(fetchBetfairMarkets(),    10000, [] as Market[]),
+      Promise.resolve([] as Market[]), // Betfair: 403 from Vercel IPs, disabled
     ])
 
     const poly      = rawPoly.sort(byVolume).slice(0, 200)

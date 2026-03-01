@@ -79,20 +79,32 @@ async function processEvent(event: any, seenMarkets: Set<string>): Promise<Marke
       get(`/markets/${market.id}/contracts/`),
       get(`/markets/${market.id}/quotes/`),
     ])
-    if (!cData?.contracts || !qData) return null
+    if (!cData?.contracts) return null
 
     const open = cData.contracts.filter((c: any) => c.state_or_outcome === 'open')
     if (open.length !== 2) return null
 
-    const yesC = open.find((c: any) => c.slug === 'yes')
-    const noC  = open.find((c: any) => c.slug === 'no')
-    if (!yesC || !noC) return null
+    // Smarkets uses 'yes'/'no' slugs OR outcome-name slugs
+    // Try slug match first, fall back to first/second contract
+    const isYes = (c: any) => /^yes/i.test(c.slug ?? '') || /^yes/i.test(c.display_name ?? '')
+    const isNo  = (c: any) => /^no/i.test(c.slug ?? '')  || /^no/i.test(c.display_name ?? '')
+    const yesC  = open.find(isYes) ?? open[0]
+    const noC   = open.find(isNo)  ?? open[1]
 
-    const yesQ = qData[yesC.id]
-    if (!yesQ) return null
+    // Smarkets quotes response: { quotes: { "CONTRACT_ID": { bids, offers } } }
+    // Fall back to flat map in case API version differs
+    const quotesMap = qData?.quotes ?? qData ?? {}
+    const yesQ = quotesMap[yesC.id] ?? quotesMap[String(yesC.id)]
 
-    const yesPrice = midpoint(yesQ.bids, yesQ.offers)
-    if (yesPrice < 0.02 || yesPrice > 0.98) return null
+    let yesPrice = yesQ ? midpoint(yesQ.bids, yesQ.offers) : 0
+
+    // Fallback: last traded price (stored as basis points 0-10000)
+    if (!yesPrice && yesC.last_traded_price) {
+      yesPrice = yesC.last_traded_price / 10000
+    }
+
+    // If still no price, skip — don't include illiquid/untouched markets
+    if (!yesPrice || yesPrice < 0.02 || yesPrice > 0.98) return null
 
     const question = market.name === event.name
       ? event.name
